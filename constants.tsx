@@ -2,25 +2,26 @@
 import React from 'react';
 
 export const COLORS = {
+  deepEmerald: '#004D40',
+  forestGlow: '#2E7D32',
   acidGreen: '#B0FF00',
-  electricBlue: '#00E5FF',
-  advertisingOrange: '#FF6D00',
-  cyberPink: '#FF00FF',
-  pureWhite: '#FFFFFF',
+  electricLime: '#CCFF00',
+  shimmerWhite: '#F1FFFA',
 };
 
+// A unified palette of greens for layering
 export const COLOR_PALETTE = [
   COLORS.acidGreen,
-  COLORS.electricBlue,
-  COLORS.advertisingOrange,
-  COLORS.cyberPink,
-  COLORS.pureWhite,
+  COLORS.electricLime,
+  '#D4FF00',
+  '#AEEA00',
+  '#76FF03',
 ];
 
 export const VIZ_MODES_INFO = [
-  { id: 'ORGANIC_WAVE', label: 'Concentric Rings', description: 'Dual thick neon rings reacting to bass and treble.' },
-  { id: 'SYMMETRIC_SPIKES', label: 'Mirrored Spikes', description: 'Sharp frequency spikes mirrored across a horizon.' },
-  { id: 'BLOCK_EQUALIZER', label: '3D Oscilloscope', description: 'Neon ribbons and sharp waveforms with highlighted nodes.' },
-  { id: 'SINE_RHYTHM', label: 'Cyber EQ Bars', description: 'Classic vertical spectral bars with floating peak points.' },
-  { id: 'FADER_DANCE', label: 'Volumetric Wave', description: 'Thick symmetric waveform with layered glowing shadows.' },
+  { id: 'ORGANIC_WAVE', label: 'Ethereal Ripples', description: 'Fluid green rings with shimmering spirit particles and peak highlights.' },
+  { id: 'SYMMETRIC_SPIKES', label: 'Neon Rain', description: 'Vertical light connectors with iridescent green gradients like falling stars.' },
+  { id: 'BLOCK_EQUALIZER', label: 'Aurora Curtains', description: 'Resplendent 3D ribbons flowing like the northern lights with high-glow nodes.' },
+  { id: 'SINE_RHYTHM', label: 'Spectral Forest', description: 'Glowing vertical bars with floating peak points in deep emerald shades.' },
+  { id: 'FADER_DANCE', label: 'Cosmic Pulse', description: 'Volumetric wave layers creating a mysterious, oscillating green nebula.' },
 ];

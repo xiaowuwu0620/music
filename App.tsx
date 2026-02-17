@@ -23,9 +23,10 @@ const App: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
+    // Slow transition through different shades of Acid Green
     const interval = setInterval(() => {
       setColorIndex((prev) => (prev + 1) % COLOR_PALETTE.length);
-    }, 25000);
+    }, 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -76,7 +77,8 @@ const App: React.FC = () => {
         audioRef.current.play();
         setActiveSlotId(id);
         setIsPlaying(true);
-        setColorIndex((prev) => (prev + 1) % COLOR_PALETTE.length);
+        // Reset color on track change for visual impact
+        setColorIndex(0);
       }
     }
   };
@@ -108,19 +110,19 @@ const App: React.FC = () => {
         isPlaying={isPlaying}
       />
 
-      {/* Aesthetic Brand Label - Minimalist Bottom Left */}
+      {/* Brand Label */}
       <div className="absolute bottom-12 left-12 pointer-events-none z-10 flex flex-col gap-1">
         <h1 className="text-3xl font-black tracking-tighter text-white opacity-80 italic flex items-center gap-3">
           <div className="w-1 h-8" style={{ backgroundColor: COLOR_PALETTE[colorIndex], transition: 'background-color 1.5s ease' }}></div>
-          VIBE<span style={{ color: COLOR_PALETTE[colorIndex], transition: 'color 1.5s ease' }}>AUDIO</span>
+          AURORA<span style={{ color: COLOR_PALETTE[colorIndex], transition: 'color 1.5s ease' }}>AUDIO</span>
         </h1>
-        <div className="flex items-center gap-4 opacity-20">
-            <span className="text-[8px] uppercase tracking-[0.6em] font-bold">Resonance Analysis v3.1</span>
-            <div className="h-[1px] w-24 bg-white"></div>
+        <div className="flex items-center gap-4 opacity-30">
+            <span className="text-[8px] uppercase tracking-[0.6em] font-bold text-emerald-100">Spectral Analysis v4.2</span>
+            <div className="h-[1px] w-24 bg-emerald-500/50"></div>
         </div>
       </div>
 
-      {/* Navigation & Controls - High Fidelity Top Right */}
+      {/* Navigation & Controls */}
       <div className="absolute top-10 right-10 z-20 w-64 max-h-[85vh] overflow-y-auto no-scrollbar pointer-events-none bg-black/40 backdrop-blur-md p-1 border-r border-t border-white/5">
         <Controls 
           slots={slots}
@@ -131,7 +133,6 @@ const App: React.FC = () => {
           currentMode={mode}
           setMode={(m) => {
             setMode(m);
-            setColorIndex((prev) => (prev + 1) % COLOR_PALETTE.length);
           }}
           isPlaying={isPlaying}
           activeColor={COLOR_PALETTE[colorIndex]}
@@ -139,11 +140,11 @@ const App: React.FC = () => {
       </div>
 
       {/* High-End Vignette */}
-      <div className="absolute inset-0 pointer-events-none opacity-50 mix-blend-multiply bg-[radial-gradient(circle_at_center,transparent_20%,black_110%)]"></div>
+      <div className="absolute inset-0 pointer-events-none opacity-60 mix-blend-multiply bg-[radial-gradient(circle_at_center,transparent_10%,black_120%)]"></div>
       
       {/* Decorative Corner Elements */}
-      <div className="absolute top-8 left-8 w-4 h-4 border-t border-l border-white/10 pointer-events-none"></div>
-      <div className="absolute bottom-8 right-8 w-4 h-4 border-b border-r border-white/10 pointer-events-none"></div>
+      <div className="absolute top-8 left-8 w-4 h-4 border-t border-l border-emerald-500/20 pointer-events-none"></div>
+      <div className="absolute bottom-8 right-8 w-4 h-4 border-b border-r border-emerald-500/20 pointer-events-none"></div>
     </div>
   );
 };

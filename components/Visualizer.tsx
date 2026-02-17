@@ -18,9 +18,9 @@ const Visualizer: React.FC<VisualizerProps> = ({ analyser, mode, activeColor, is
   const frameRef = useRef<number>(0);
   const colorRef = useRef(new THREE.Color(activeColor));
 
-  // Mode-specific persistent state
   const objectsRef = useRef<THREE.Object3D[]>([]);
-  const peaksRef = useRef<{y: number, vel: number}[]>([]); // For Mode 4 peaks
+  const peaksRef = useRef<{y: number, vel: number}[]>([]); 
+  const bgParticlesRef = useRef<THREE.Points | null>(null);
 
   useEffect(() => {
     colorRef.current.set(activeColor);
@@ -32,19 +32,43 @@ const Visualizer: React.FC<VisualizerProps> = ({ analyser, mode, activeColor, is
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
-    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 2000);
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 3000);
     camera.position.z = 240;
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    const clearScene = () => {
-      while(scene.children.length > 0){ 
-        const obj = scene.children[0];
+    // Create persistent Aurora Background Particles
+    const createBG = () => {
+      const pCount = 800;
+      const pGeom = new THREE.BufferGeometry();
+      const pPos = new Float32Array(pCount * 3);
+      for(let i=0; i<pCount; i++) {
+        pPos[i*3] = (Math.random() - 0.5) * 1500;
+        pPos[i*3+1] = (Math.random() - 0.5) * 1500;
+        pPos[i*3+2] = (Math.random() - 0.5) * 800 - 400;
+      }
+      pGeom.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+      const pMat = new THREE.PointsMaterial({
+        size: 1.5,
+        color: 0x44ff44,
+        transparent: true,
+        opacity: 0.15,
+        blending: THREE.AdditiveBlending
+      });
+      const bg = new THREE.Points(pGeom, pMat);
+      scene.add(bg);
+      bgParticlesRef.current = bg;
+    };
+    createBG();
+
+    const clearModeObjects = () => {
+      objectsRef.current.forEach(obj => {
+        scene.remove(obj);
         obj.traverse((child: any) => {
           if (child.geometry) child.geometry.dispose();
           if (child.material) {
@@ -52,169 +76,141 @@ const Visualizer: React.FC<VisualizerProps> = ({ analyser, mode, activeColor, is
             else child.material.dispose();
           }
         });
-        scene.remove(obj); 
-      }
+      });
       objectsRef.current = [];
     };
 
     const setupMode = () => {
-      clearScene();
+      clearModeObjects();
       const col = colorRef.current;
 
       if (mode === VizMode.ORGANIC_WAVE) {
-        // Mode 1: Thick Concentric Neon Rings + Peak Nodes
-        for (let r = 0; r < 2; r++) {
-          const group = new THREE.Group();
-          for (let l = 0; l < 16; l++) {
-            const geom = new THREE.BufferGeometry();
-            const verts = new Float32Array(256 * 3);
-            geom.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-            const mat = new THREE.LineBasicMaterial({ 
-                color: col, 
-                transparent: true, 
-                opacity: 0.85 - (l * 0.05),
-                blending: THREE.AdditiveBlending 
-            });
-            const line = new THREE.LineLoop(geom, mat);
-            line.userData = { offset: l * 0.5 };
-            group.add(line);
-          }
-          
-          const pGeom = new THREE.BufferGeometry();
-          const pPos = new Float32Array(64 * 3); 
-          pGeom.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
-          const pMat = new THREE.PointsMaterial({ 
-            size: 5, color: 0xffffff, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending 
+        // Mode 1: Ethereal Ripples
+        const group = new THREE.Group();
+        for (let l = 0; l < 24; l++) {
+          const geom = new THREE.BufferGeometry();
+          const verts = new Float32Array(256 * 3);
+          geom.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+          const mat = new THREE.LineBasicMaterial({ 
+              color: col, 
+              transparent: true, 
+              opacity: 0.8 - (l * 0.03),
+              blending: THREE.AdditiveBlending 
           });
-          const nodes = new THREE.Points(pGeom, pMat);
-          nodes.name = `nodes_${r}`;
-          group.add(nodes);
-
-          scene.add(group);
-          objectsRef.current.push(group);
+          const line = new THREE.LineLoop(geom, mat);
+          line.userData = { offset: l * 0.4 };
+          group.add(line);
         }
-      } else if (mode === VizMode.SYMMETRIC_SPIKES) {
-        // Mode 2: Kinetic Spikes with Vertical Connectors & Fluid Color
-        const barCount = 256;
         
-        // Geometry for vertical bars (LineSegments)
+        // Highlighted Peak Nodes
+        const pGeom = new THREE.BufferGeometry();
+        const pPos = new Float32Array(80 * 3); 
+        pGeom.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+        const pMat = new THREE.PointsMaterial({ 
+          size: 4, color: 0xffffff, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending 
+        });
+        const nodes = new THREE.Points(pGeom, pMat);
+        nodes.name = "peak_nodes";
+        group.add(nodes);
+
+        scene.add(group);
+        objectsRef.current.push(group);
+      } else if (mode === VizMode.SYMMETRIC_SPIKES) {
+        // Mode 2: Neon Rain / Symmetric Gradients
+        const barCount = 180;
         const lineGeom = new THREE.BufferGeometry();
-        const linePos = new Float32Array(barCount * 2 * 3); // 2 points per vertical bar
+        const linePos = new Float32Array(barCount * 2 * 3);
         const lineColors = new Float32Array(barCount * 2 * 3);
         lineGeom.setAttribute('position', new THREE.BufferAttribute(linePos, 3));
         lineGeom.setAttribute('color', new THREE.BufferAttribute(lineColors, 3));
-        
-        const lineMat = new THREE.LineBasicMaterial({ 
-          vertexColors: true, 
-          transparent: true, 
-          opacity: 0.8, 
-          blending: THREE.AdditiveBlending 
-        });
-        const lines = new THREE.LineSegments(lineGeom, lineMat);
-        lines.name = "kineticLines";
+        const lines = new THREE.LineSegments(lineGeom, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending }));
         scene.add(lines);
         objectsRef.current.push(lines);
 
-        // Geometry for peak points
         const ptsGeom = new THREE.BufferGeometry();
-        const ptsPos = new Float32Array(barCount * 2 * 3); // Mirrored peaks (top and bottom)
+        const ptsPos = new Float32Array(barCount * 2 * 3);
         const ptsColors = new Float32Array(barCount * 2 * 3);
         ptsGeom.setAttribute('position', new THREE.BufferAttribute(ptsPos, 3));
         ptsGeom.setAttribute('color', new THREE.BufferAttribute(ptsColors, 3));
-        
-        const ptsMat = new THREE.PointsMaterial({ 
-          size: 4, 
-          vertexColors: true, 
-          transparent: true, 
-          opacity: 0.9, 
-          blending: THREE.AdditiveBlending 
-        });
-        const pts = new THREE.Points(ptsGeom, ptsMat);
-        pts.name = "kineticPoints";
+        const pts = new THREE.Points(ptsGeom, new THREE.PointsMaterial({ size: 5, vertexColors: true, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending }));
         scene.add(pts);
         objectsRef.current.push(pts);
-
-        // Horizon line
-        const horizonGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-300, 0, 0), new THREE.Vector3(300, 0, 0)]);
-        const horizon = new THREE.Line(horizonGeom, new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.1, transparent: true }));
-        scene.add(horizon);
       } else if (mode === VizMode.BLOCK_EQUALIZER) {
-        // Mode 3: 3D Oscilloscope & Ribbons
+        // Mode 3: Aurora Curtains (Resplendent Ribbons)
         const group = new THREE.Group();
-        const grid = new THREE.GridHelper(800, 40, 0xffffff, 0xffffff);
+        
+        // Sci-Fi Horizon Grid
+        const grid = new THREE.GridHelper(1000, 50, 0x00ff00, 0x00ff00);
         grid.material.transparent = true;
-        grid.material.opacity = 0.06;
+        grid.material.opacity = 0.05;
         grid.rotation.x = Math.PI / 2;
-        grid.position.z = -50;
+        grid.position.z = -100;
         group.add(grid);
 
-        for (let j = 0; j < 4; j++) {
+        for (let j = 0; j < 6; j++) {
           const ribbonGroup = new THREE.Group();
-          const pointsCount = 300;
-          for (let l = 0; l < 5; l++) {
+          const pointsCount = 400;
+          // 8 layers for maximum "aurora curtain" thickness
+          for (let l = 0; l < 8; l++) {
             const geom = new THREE.BufferGeometry();
             const verts = new Float32Array(pointsCount * 3);
             geom.setAttribute('position', new THREE.BufferAttribute(verts, 3));
             const mat = new THREE.LineBasicMaterial({ 
               color: col, transparent: true, 
-              opacity: (0.9 - (j * 0.12)) * (1.0 - (l * 0.15)), 
+              opacity: (1.0 - (j * 0.15)) * (0.8 - (l * 0.1)), 
               blending: THREE.AdditiveBlending 
             });
             const line = new THREE.Line(geom, mat);
-            line.name = `ribbon_${j}_layer_${l}`;
-            line.userData = { jOffset: j * 1.5, layerIdx: l, layerSpread: l * 0.6 }; 
+            line.name = `curtain_${j}_l${l}`;
+            line.userData = { jOff: j * 1.2, lSpread: l * 0.8 }; 
             ribbonGroup.add(line);
           }
           const pGeom = new THREE.BufferGeometry();
-          const pPos = new Float32Array(48 * 3); 
+          const pPos = new Float32Array(64 * 3); 
           pGeom.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
-          const pMat = new THREE.PointsMaterial({ size: 6, color: 0xffffff, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending });
-          const pts = new THREE.Points(pGeom, pMat);
-          pts.name = `nodes_${j}`;
-          ribbonGroup.add(pts);
+          const pMat = new THREE.PointsMaterial({ size: 8, color: 0xffffff, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending });
+          const nodes = new THREE.Points(pGeom, pMat);
+          nodes.name = `curtain_nodes_${j}`;
+          ribbonGroup.add(nodes);
           group.add(ribbonGroup);
         }
         scene.add(group);
         objectsRef.current.push(group);
       } else if (mode === VizMode.SINE_RHYTHM) {
-        // Mode 4: Cyber EQ Bars
+        // Mode 4: Spectral Forest
         const eqGroup = new THREE.Group();
-        const barCount = 48;
-        const barWidth = 6;
-        const spacing = 2;
+        const barCount = 64;
         peaksRef.current = Array.from({length: barCount}, () => ({ y: 0, vel: 0 }));
         for (let i = 0; i < barCount; i++) {
-          const barGeom = new THREE.BoxGeometry(barWidth, 1, 2);
-          const barMat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
+          const barGeom = new THREE.BoxGeometry(4, 1, 4);
+          const barMat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending });
           const bar = new THREE.Mesh(barGeom, barMat);
-          bar.position.x = (i - barCount / 2) * (barWidth + spacing);
-          bar.position.y = 0;
-          bar.name = `bar_${i}`;
+          bar.position.x = (i - barCount / 2) * 8;
+          bar.name = `tree_${i}`;
           eqGroup.add(bar);
-          const peakGeom = new THREE.PlaneGeometry(barWidth, barWidth / 2);
-          const peakMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+          const peakGeom = new THREE.SphereGeometry(2, 8, 8);
+          const peakMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
           const peak = new THREE.Mesh(peakGeom, peakMat);
           peak.position.x = bar.position.x;
-          peak.position.z = 1.1;
-          peak.name = `peak_${i}`;
+          peak.name = `glow_${i}`;
           eqGroup.add(peak);
         }
         scene.add(eqGroup);
         objectsRef.current.push(eqGroup);
       } else if (mode === VizMode.FADER_DANCE) {
-        // Mode 5: Volumetric Wave
+        // Mode 5: Cosmic Pulse
         const group = new THREE.Group();
-        const layers = 15;
+        const layers = 20;
         for (let l = 0; l < layers; l++) {
           const geom = new THREE.BufferGeometry();
           const verts = new Float32Array(300 * 3 * 2); 
           geom.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-          const layerCol = new THREE.Color('#00E5FF').lerp(new THREE.Color('#9D00FF'), l / layers);
           const mat = new THREE.LineBasicMaterial({ 
-            color: layerCol, transparent: true, opacity: 1.0 - (l * 0.05), blending: THREE.AdditiveBlending
+            color: new THREE.Color(0x00ff00).lerp(new THREE.Color(0xccff00), l/layers), 
+            transparent: true, opacity: 1.0 - (l * 0.04), blending: THREE.AdditiveBlending
           });
           const line = new THREE.Line(geom, mat);
-          line.userData = { xOff: l * 1.5, yOff: l * 0.5, lIdx: l };
+          line.userData = { xOff: l * 2, yOff: l * 1.5 };
           group.add(line);
         }
         scene.add(group);
@@ -243,184 +239,140 @@ const Visualizer: React.FC<VisualizerProps> = ({ analyser, mode, activeColor, is
       }
       const time = Date.now() * 0.001;
       const bass = (freqData[0] + freqData[2] + freqData[4]) / 3 / 255;
-      const treble = (freqData[120] + freqData[150]) / 2 / 255;
+      const treble = (freqData[60] + freqData[90]) / 2 / 255;
 
-      if (mode !== VizMode.FADER_DANCE && mode !== VizMode.SYMMETRIC_SPIKES) {
-        scene.traverse((obj: any) => {
-          if (obj.material && obj.material.color && !obj.name.includes("peak") && !obj.name.includes("nodes")) {
-            obj.material.color.lerp(colorRef.current, 0.08);
-          }
-        });
+      // Update background cosmic particles
+      if (bgParticlesRef.current) {
+        const bg = bgParticlesRef.current;
+        bg.rotation.y += 0.0005;
+        bg.rotation.x += 0.0002;
+        (bg.material as THREE.PointsMaterial).opacity = 0.1 + bass * 0.15;
       }
 
+      // Update modes with Acid Green logic
+      scene.traverse((obj: any) => {
+        if (obj.material && obj.material.color && !obj.name.includes("glow") && !obj.name.includes("nodes")) {
+          obj.material.color.lerp(colorRef.current, 0.06);
+        }
+      });
+
       if (mode === VizMode.ORGANIC_WAVE) {
-        objectsRef.current.forEach((group, gIdx) => {
-          const baseRadius = gIdx === 0 ? 45 : 75;
-          const expansion = gIdx === 0 ? treble * 25 : bass * 35;
-          const nodes = group.getObjectByName(`nodes_${gIdx}`) as THREE.Points;
-          const nodePos = nodes?.geometry.attributes.position.array as Float32Array;
-          let nodeCount = 0;
-          const radialValues = new Float32Array(256);
+        const group = objectsRef.current[0] as THREE.Group;
+        const nodes = group.getObjectByName("peak_nodes") as THREE.Points;
+        const nodePos = nodes.geometry.attributes.position.array as Float32Array;
+        let nCount = 0;
+        const baseR = 60 + bass * 40;
 
-          group.children.forEach((child) => {
-            if (child.type !== 'LineLoop') return;
-            const line = child as THREE.LineLoop;
-            const pos = line.geometry.attributes.position.array as Float32Array;
-            const offset = (line.userData as any).offset;
-            for(let i=0; i<256; i++){
-              const angle = (i/256) * Math.PI * 2;
-              const fVal = isPlaying ? freqData[i % 128] / 255 : 0;
-              const r = baseRadius + expansion + fVal * 12 + Math.sin(time * 5 + i * 0.1) * offset;
-              pos[i*3] = Math.cos(angle) * r;
-              pos[i*3+1] = Math.sin(angle) * r;
-              pos[i*3+2] = Math.sin(time + i*0.1) * offset * 0.5;
-              if (offset === 0) radialValues[i] = r; 
-            }
-            line.geometry.attributes.position.needsUpdate = true;
-          });
-
-          if (nodes && nodePos) {
-            for (let i = 0; i < 256; i++) {
-              const prev = radialValues[(i - 1 + 256) % 256];
-              const curr = radialValues[i];
-              const next = radialValues[(i + 1) % 256];
-              const isPeak = curr > prev && curr > next;
-              const isTrough = curr < prev && curr < next;
-              if ((isPeak || isTrough) && nodeCount < 64) {
-                const angle = (i / 256) * Math.PI * 2;
-                nodePos[nodeCount * 3] = Math.cos(angle) * curr;
-                nodePos[nodeCount * 3 + 1] = Math.sin(angle) * curr;
-                nodePos[nodeCount * 3 + 2] = 0;
-                nodeCount++;
+        group.children.forEach((child) => {
+          if (child.type !== 'LineLoop') return;
+          const line = child as THREE.LineLoop;
+          const pos = line.geometry.attributes.position.array as Float32Array;
+          const off = line.userData.offset;
+          for(let i=0; i<256; i++){
+            const angle = (i/256) * Math.PI * 2;
+            const fVal = isPlaying ? freqData[i % 128] / 255 : 0;
+            const r = baseR + fVal * 25 + Math.sin(time * 3 + i * 0.08) * off;
+            pos[i*3] = Math.cos(angle) * r;
+            pos[i*3+1] = Math.sin(angle) * r;
+            pos[i*3+2] = Math.sin(time + i*0.05) * off * 2;
+            
+            if (off === 0 && i % 12 === 0 && nCount < 80) {
+              if (fVal > 0.4) {
+                nodePos[nCount*3] = pos[i*3]; nodePos[nCount*3+1] = pos[i*3+1]; nodePos[nCount*3+2] = pos[i*3+2];
+                nCount++;
               }
             }
-            for (let k = nodeCount; k < 64; k++) { nodePos[k * 3 + 2] = -5000; }
-            nodes.geometry.attributes.position.needsUpdate = true;
-            (nodes.material as THREE.PointsMaterial).opacity = 0.4 + Math.abs(Math.sin(time * 15)) * 0.6;
           }
-          group.rotation.z += 0.002 * (gIdx === 0 ? 1 : -1);
+          line.geometry.attributes.position.needsUpdate = true;
         });
+        for(let k=nCount; k<80; k++) nodePos[k*3+2] = -5000;
+        nodes.geometry.attributes.position.needsUpdate = true;
+        (nodes.material as THREE.PointsMaterial).opacity = 0.5 + Math.sin(time*12)*0.5;
+
       } else if (mode === VizMode.SYMMETRIC_SPIKES) {
-        // Mode 2: Kinetic Spikes with Fluid Gradient
         const lines = objectsRef.current[0] as THREE.LineSegments;
-        const points = objectsRef.current[1] as THREE.Points;
-        const linePos = lines.geometry.attributes.position.array as Float32Array;
-        const lineColors = lines.geometry.attributes.color.array as Float32Array;
-        const ptsPos = points.geometry.attributes.position.array as Float32Array;
-        const ptsColors = points.geometry.attributes.color.array as Float32Array;
-        
-        const barCount = 256;
-        const fluidColor = new THREE.Color();
+        const pts = objectsRef.current[1] as THREE.Points;
+        const lPos = lines.geometry.attributes.position.array as Float32Array;
+        const lCol = lines.geometry.attributes.color.array as Float32Array;
+        const pPos = pts.geometry.attributes.position.array as Float32Array;
+        const pCol = pts.geometry.attributes.color.array as Float32Array;
+        const count = 180;
 
-        for(let i=0; i < barCount; i++){
-          const pIdx = i / barCount;
-          const centerDist = Math.abs(pIdx - 0.5) * 2;
-          const fIdx = Math.floor(centerDist * 200);
-          const fVal = isPlaying ? freqData[fIdx] / 255 : 0;
+        for(let i=0; i<count; i++){
+          const pIdx = i / count;
+          const dist = Math.abs(pIdx - 0.5) * 2;
+          const fVal = isPlaying ? freqData[Math.floor(dist * 200)] / 255 : 0;
+          const x = (pIdx - 0.5) * 600;
+          const y = (fVal * 160) + (Math.sin(time * 6 + i * 0.2) * 5);
           
-          const x = (pIdx - 0.5) * 550;
-          const yTop = (fVal * 120) + (Math.sin(time * 5 + i * 0.2) * 5);
-          const yBottom = -yTop;
+          lPos[i*6] = x; lPos[i*6+1] = y; lPos[i*6+3] = x; lPos[i*6+4] = -y;
           
-          // Flowing Color Logic
-          // Use HSL for iridescence: Hue shifts over time and spectrum
-          const hue = (pIdx * 0.8 + time * 0.5) % 1.0;
-          fluidColor.setHSL(hue, 0.9, 0.6);
-          // Lerp with active color for theme consistency
-          fluidColor.lerp(colorRef.current, 0.4);
-
-          // Update Lines (Top point, then Bottom point)
-          const lIdx = i * 2 * 3;
-          linePos[lIdx] = x; linePos[lIdx+1] = yTop; linePos[lIdx+2] = 0;
-          linePos[lIdx+3] = x; linePos[lIdx+4] = yBottom; linePos[lIdx+5] = 0;
-
-          lineColors[lIdx] = fluidColor.r; lineColors[lIdx+1] = fluidColor.g; lineColors[lIdx+2] = fluidColor.b;
-          lineColors[lIdx+3] = fluidColor.r; lineColors[lIdx+4] = fluidColor.g; lineColors[lIdx+5] = fluidColor.b;
-
-          // Update Points (Peak top and Peak bottom)
-          const pIdx3 = i * 2 * 3;
-          ptsPos[pIdx3] = x; ptsPos[pIdx3+1] = yTop; ptsPos[pIdx3+2] = 0;
-          ptsPos[pIdx3+3] = x; ptsPos[pIdx3+4] = yBottom; ptsPos[pIdx3+5] = 0;
-
-          // Points are brighter/white at tips for "High Light" effect
-          const tipColor = fluidColor.clone().lerp(new THREE.Color(0xffffff), 0.7);
-          ptsColors[pIdx3] = tipColor.r; ptsColors[pIdx3+1] = tipColor.g; ptsColors[pIdx3+2] = tipColor.b;
-          ptsColors[pIdx3+3] = tipColor.r; ptsColors[pIdx3+4] = tipColor.g; ptsColors[pIdx3+5] = tipColor.b;
+          const glowCol = new THREE.Color().setHSL(0.25 + (dist * 0.1), 1.0, 0.4 + fVal * 0.5);
+          lCol[i*6] = glowCol.r; lCol[i*6+1] = glowCol.g; lCol[i*6+2] = glowCol.b;
+          lCol[i*6+3] = glowCol.r; lCol[i*6+4] = glowCol.g; lCol[i*6+5] = glowCol.b;
+          
+          pPos[i*6] = x; pPos[i*6+1] = y; pPos[i*6+3] = x; pPos[i*6+4] = -y;
+          const tip = glowCol.clone().lerp(new THREE.Color(0xffffff), 0.7);
+          pCol[i*6] = tip.r; pCol[i*6+1] = tip.g; pCol[i*6+2] = tip.b;
+          pCol[i*6+3] = tip.r; pCol[i*6+4] = tip.g; pCol[i*6+5] = tip.b;
         }
-
         lines.geometry.attributes.position.needsUpdate = true;
         lines.geometry.attributes.color.needsUpdate = true;
-        points.geometry.attributes.position.needsUpdate = true;
-        points.geometry.attributes.color.needsUpdate = true;
+        pts.geometry.attributes.position.needsUpdate = true;
+        pts.geometry.attributes.color.needsUpdate = true;
+
       } else if (mode === VizMode.BLOCK_EQUALIZER) {
         const group = objectsRef.current[0] as THREE.Group;
-        const count = 300;
-        for (let j = 0; j < 4; j++) {
-          const ribbonGroup = group.children[j+1] as THREE.Group;
-          const nodes = ribbonGroup.getObjectByName(`nodes_${j}`) as THREE.Points;
-          const nodePos = nodes.geometry.attributes.position.array as Float32Array;
-          let nodeIdx = 0;
-          for (let l = 0; l < 5; l++) {
-            const line = ribbonGroup.getObjectByName(`ribbon_${j}_layer_${l}`) as THREE.Line;
-            if (!line) continue;
+        for (let j = 0; j < 6; j++) {
+          const ribGrp = group.children[j+1] as THREE.Group;
+          const nodes = ribGrp.getObjectByName(`curtain_nodes_${j}`) as THREE.Points;
+          const nPos = nodes.geometry.attributes.position.array as Float32Array;
+          let nIdx = 0;
+
+          for (let l = 0; l < 8; l++) {
+            const line = ribGrp.getObjectByName(`curtain_${j}_l${l}`) as THREE.Line;
             const pos = line.geometry.attributes.position.array as Float32Array;
-            const { jOffset, layerSpread } = line.userData;
-            for (let i = 0; i < count; i++) {
-              const pIdx = i / count;
+            const { jOff, lSpread } = line.userData;
+            for (let i = 0; i < 400; i++) {
+              const p = i / 400;
               let val = 0;
-              if (j === 0) {
-                val = isPlaying ? (timeData[Math.floor(pIdx * 128)] - 128) / 128 : 0;
-                val *= 100;
-              } else {
-                const fVal = isPlaying ? freqData[Math.floor(pIdx * 100)] / 255 : 0;
-                val = Math.sin(pIdx * 10 + time * 3 + jOffset) * (20 + fVal * 80);
-              }
-              const x = (pIdx - 0.5) * 600;
-              const z = Math.cos(pIdx * 5 + time + jOffset) * 40;
-              pos[i*3] = x; pos[i*3+1] = val + layerSpread; pos[i*3+2] = z + layerSpread * 0.5;
-              if (l === 0 && i % 6 === 0 && nodeIdx < 48) {
-                if (Math.abs(val) > 25) {
-                  nodePos[nodeIdx*3] = x; nodePos[nodeIdx*3+1] = val; nodePos[nodeIdx*3+2] = z;
-                  nodeIdx++;
-                }
+              if (j === 0) val = isPlaying ? (timeData[Math.floor(p*128)] - 128) / 128 * 140 : 0;
+              else val = Math.sin(p * 8 + time * 2.5 + jOff) * (30 + (isPlaying ? freqData[Math.floor(p*80)]/255 * 100 : 0));
+              
+              const x = (p - 0.5) * 700;
+              const z = Math.cos(p * 4 + time + jOff) * 60;
+              pos[i*3] = x; pos[i*3+1] = val + lSpread; pos[i*3+2] = z + lSpread * 0.5;
+
+              if (l === 0 && i % 8 === 0 && nIdx < 64 && Math.abs(val) > 40) {
+                nPos[nIdx*3] = x; nPos[nIdx*3+1] = val; nPos[nIdx*3+2] = z;
+                nIdx++;
               }
             }
             line.geometry.attributes.position.needsUpdate = true;
           }
-          for (let k = nodeIdx; k < 48; k++) { nodePos[k*3+2] = -5000; }
+          for (let k = nIdx; k < 64; k++) nPos[k*3+2] = -5000;
           nodes.geometry.attributes.position.needsUpdate = true;
-          (nodes.material as THREE.PointsMaterial).opacity = 0.6 + Math.sin(time*12) * 0.4;
+          (nodes.material as THREE.PointsMaterial).opacity = 0.5 + Math.sin(time*10)*0.5;
         }
+
       } else if (mode === VizMode.SINE_RHYTHM) {
         const group = objectsRef.current[0] as THREE.Group;
-        const count = 48;
-        const gravity = 0.6;
-        for (let i = 0; i < count; i++) {
-          const fVal = isPlaying ? freqData[Math.floor((i / count) * 150)] / 255 : 0;
-          const barHeight = Math.max(2, fVal * 160);
-          const bar = group.getObjectByName(`bar_${i}`) as THREE.Mesh;
-          const peak = group.getObjectByName(`peak_${i}`) as THREE.Mesh;
-          if (bar) {
-            bar.scale.y = barHeight;
-            bar.position.y = barHeight / 2 - 80;
-            const barCol = new THREE.Color('#9D00FF').lerp(new THREE.Color('#FF0000'), fVal);
-            (bar.material as THREE.MeshBasicMaterial).color.copy(barCol);
-          }
-          if (peak && peaksRef.current[i]) {
-            const currentPeak = peaksRef.current[i];
-            const barTopY = (barHeight - 80);
-            if (barTopY > currentPeak.y) {
-              currentPeak.y = barTopY;
-              currentPeak.vel = 0;
-            } else {
-              currentPeak.vel -= gravity;
-              currentPeak.y += currentPeak.vel;
-            }
-            if (currentPeak.y < -80) currentPeak.y = -80;
-            peak.position.y = currentPeak.y + 2;
-            peak.rotation.z += 0.02;
+        for (let i = 0; i < 64; i++) {
+          const fVal = isPlaying ? freqData[Math.floor((i/64)*160)] / 255 : 0;
+          const h = Math.max(4, fVal * 200);
+          const tree = group.getObjectByName(`tree_${i}`) as THREE.Mesh;
+          const glow = group.getObjectByName(`glow_${i}`) as THREE.Mesh;
+          if (tree) { tree.scale.y = h; tree.position.y = h / 2 - 100; (tree.material as THREE.MeshBasicMaterial).opacity = 0.2 + fVal * 0.6; }
+          if (glow && peaksRef.current[i]) {
+            const p = peaksRef.current[i];
+            const topY = h - 100;
+            if (topY > p.y) { p.y = topY; p.vel = 0; } else { p.vel -= 0.8; p.y += p.vel; }
+            if (p.y < -100) p.y = -100;
+            glow.position.y = p.y + 4;
+            glow.scale.setScalar(0.5 + fVal);
           }
         }
+
       } else if (mode === VizMode.FADER_DANCE) {
         const group = objectsRef.current[0] as THREE.Group;
         group.children.forEach((child) => {
@@ -428,23 +380,21 @@ const Visualizer: React.FC<VisualizerProps> = ({ analyser, mode, activeColor, is
           const pos = line.geometry.attributes.position.array as Float32Array;
           const { xOff, yOff } = line.userData;
           for(let i=0; i<300; i++){
-            const pIdx = i / 300;
-            const distFromCenter = Math.abs(pIdx - 0.5) * 2;
-            const fIdx = Math.floor(distFromCenter * 150);
-            const val = isPlaying ? freqData[fIdx] / 255 : 0;
-            const taper = Math.sin(pIdx * Math.PI);
-            const x = (pIdx - 0.5) * 500 + (Math.sin(time + yOff) * 10);
-            const y = (val * 120 * taper) + yOff + (Math.sin(time * 4 + i * 0.05) * 5);
-            pos[i*3] = x; pos[i*3+1] = y; pos[i*3+2] = 0;
-            const bIdx = (i + 300) * 3;
-            pos[bIdx] = x; pos[bIdx+1] = -y; pos[bIdx+2] = 0;
+            const p = i / 300;
+            const dist = Math.abs(p - 0.5) * 2;
+            const fVal = isPlaying ? freqData[Math.floor(dist * 180)] / 255 : 0;
+            const t = Math.sin(p * Math.PI);
+            const x = (p - 0.5) * 600 + (Math.sin(time + yOff) * 15);
+            const y = (fVal * 150 * t) + yOff + (Math.sin(time * 5 + i * 0.04) * 8);
+            pos[i*3] = x; pos[i*3+1] = y; pos[i*3+2] = Math.sin(time + p * 5) * 20;
+            const b = (i + 300) * 3;
+            pos[b] = x; pos[b+1] = -y; pos[b+2] = -pos[i*3+2];
           }
           line.geometry.attributes.position.needsUpdate = true;
         });
       }
 
-      const camTargetZ = 240 - (bass * 60);
-      camera.position.z = THREE.MathUtils.lerp(camera.position.z, camTargetZ, 0.05);
+      camera.position.z = THREE.MathUtils.lerp(camera.position.z, 240 - (bass * 80), 0.05);
       camera.lookAt(0, 0, 0);
       renderer.render(scene, camera);
     };
