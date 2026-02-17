@@ -1,0 +1,7 @@
+{
+  "name": "VibeAudio Visualizer",
+  "description": "A high-end cinematic music visualizer featuring 5 unique geometric modes and multi-slot MP3 support, powered by Three.js and Web Audio API.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
